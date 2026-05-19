@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+        }
+        .container { 
+            position: relative; 
+            width: 100%; 
+            height: 220px; 
+            background: linear-gradient(to bottom, #87CEFA 0%, #E0F6FF 100%); /* Langit Biru Cerah */
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        /* Jalan Aspal */
+        .asphalt {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 80px;
+            background-color: #34495e; /* Warna aspal gelap */
+            border-top: 4px solid #7f8c8d; /* Trotoar/Pembatas jalan */
+            overflow: hidden;
+        }
+
+        /* Marka Garis Putus-Putus */
+        .road-lines {
+            position: absolute;
+            bottom: 35px; /* Berada di tengah aspal */
+            width: 200%;
+            height: 6px;
+            background: repeating-linear-gradient(
+                90deg, 
+                transparent, 
+                transparent 40px, 
+                #ffffff 40px, /* Garis putih */
+                #ffffff 80px
+            );
+            animation: driveRoad 0.6s linear infinite;
+        }
+
+        /* Pemandangan: Pohon dan Rambu */
+        .scenery {
+            position: absolute;
+            bottom: 80px; /* Tepat di atas aspal */
+            font-size: 45px;
+            right: -100px;
+            animation: passBy 4s linear infinite;
+        }
+        .scenery.tree1 { animation-delay: 0s; }
+        .scenery.sign { animation-delay: 1.5s; }
+        .scenery.tree2 { animation-delay: 2.5s; font-size: 35px; filter: brightness(0.8); } /* Pohon lebih kecil di background */
+
+        /* Mobil */
+        .car-emoji {
+            position: absolute;
+            bottom: 25px; /* Berada di atas aspal */
+            left: 15%;
+            font-size: 65px;
+            /* Membalik mobil agar menghadap kanan, plus animasi suspensi */
+            animation: carSuspension 0.3s infinite alternate ease-in-out;
+            filter: drop-shadow(5px 5px 4px rgba(0,0,0,0.4));
+            z-index: 10;
+        }
+
+        /* Keyframes untuk Animasi */
+        @keyframes driveRoad {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-80px); } /* Menggerakkan jalan ke kiri */
+        }
+        @keyframes carSuspension {
+            0% { transform: scaleX(-1) translateY(0); }
+            100% { transform: scaleX(-1) translateY(-4px); }
+        }
+        @keyframes passBy {
+            0% { right: -100px; }
+            100% { right: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h3 style="position: absolute; top: 10px; left: 20px; margin: 0; color: #2c3e50;">
+            Status AI: <span style="color: #27ae60;">Aktif & Memantau</span>
+        </h3>
+        
+        <div class="scenery tree1">🌲</div>
+        <div class="scenery sign">🚸</div>
+        <div class="scenery tree2">🌳</div>
+        
+        <div class="asphalt">
+            <div class="road-lines"></div>
+        </div>
+        <div class="car-emoji">🚙</div>
+    </div>
+</body>
+</html>

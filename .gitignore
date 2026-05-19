@@ -1,0 +1,10 @@
+# Mengabaikan folder environment
+env/
+venv/
+
+# Mengabaikan cache Python
+__pycache__/
+*.pyc
+
+# Mengabaikan file model AI yang kebesaran (opsional, jika nanti file > 100MB)
+# *.pt
