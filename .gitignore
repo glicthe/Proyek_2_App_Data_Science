@@ -8,3 +8,6 @@ __pycache__/
 
 # Mengabaikan file model AI yang kebesaran (opsional, jika nanti file > 100MB)
 # *.pt
+
+env/
+.env
