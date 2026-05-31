@@ -23,6 +23,10 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Model"))
 from inference import jalankan_deteksi, MODEL_YOLO # type: ignore
 
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Utils"))
+from audio_manager import putar_audio_gtts # type: ignore
+
+from ui_components import render_speedometer
 
 # ===========================================================================
 # 0. KONFIGURASI HALAMAN GLOBAL
@@ -210,11 +214,21 @@ if menu_pilihan == "🏠 Dashboard":
 
     # ── KPI Cards ───────────────────────────────────────────────────────────
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Total Kelas Rambu", "48", delta=None)
-    k2.metric("Model", "YOLOv8", delta=None)
-    k3.metric("Status Model", "Belum Dimuat", delta=None)
-    k4.metric("Mode Aktif", "Demo / Dummy", delta=None)
+    
+    # Deteksi status mesin YOLO secara dinamis
+    if MODEL_YOLO is not None:
+        status_model = "Aktif (Dimuat)"
+        mode_aktif = "AI Inference"
+        jumlah_kelas = str(len(MODEL_YOLO.names)) # Otomatis baca jumlah kelas dari best.pt
+    else:
+        status_model = "Belum Dimuat"
+        mode_aktif = "Demo / Dummy"
+        jumlah_kelas = "-"
 
+    k1.metric("Total Kelas Rambu", jumlah_kelas, delta=None)
+    k2.metric("Model", "YOLOv8", delta=None)
+    k3.metric("Status Model", status_model, delta=None)
+    k4.metric("Mode Aktif", mode_aktif, delta=None)
     st.markdown("---")
 
     # ── Ringkasan Fitur ─────────────────────────────────────────────────────
@@ -351,8 +365,8 @@ elif menu_pilihan == "🎬 Deteksi Video":
 
             # ── Tombol Proses ──────────────────────────────────────────────
             if st.button("▶ Proses Video dengan AI", use_container_width=True):
-                # Simpan video ke disk sementara agar cv2.VideoCapture bisa membaca
-                tmp_path = "/tmp/adas_video.mp4"
+                # 1. Simpan raw video sementara agar bisa dibaca OpenCV
+                tmp_path = "adas_video.mp4"
                 with open(tmp_path, "wb") as f:
                     f.write(file_video.read())
 
@@ -360,8 +374,17 @@ elif menu_pilihan == "🎬 Deteksi Video":
                 if not cap.isOpened():
                     st.error("❌ Gagal membuka file video. Pastikan format MP4/AVI valid.")
                 else:
-                    # Hitung total frame untuk progress bar
+                    # 2. Persiapkan VideoWriter untuk membuat video baru
+                    output_path = "hasil_deteksi_adas.mp4"
+                    lebar = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    tinggi = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    fps = cap.get(cv2.CAP_PROP_FPS)
                     total_frame = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
+                    
+                    # Gunakan codec mp4v (standar kompresi MP4 di OpenCV)
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    out = cv2.VideoWriter(output_path, fourcc, fps, (lebar, tinggi))
+
                     progress_bar = st.progress(0, text="Memproses video…")
                     frame_ke = 0
 
@@ -375,7 +398,14 @@ elif menu_pilihan == "🎬 Deteksi Video":
                             frame, kecepatan_kmh
                         )
 
-                        # Konversi BGR → RGB untuk Streamlit
+                        # --- TAMBAHKAN TRIGGER AUDIO DI SINI ---
+                        if status in ["Peringatan", "Pelanggaran"]:
+                            putar_audio_gtts(pesan)
+
+                        # --- BAGIAN BARU: Tulis frame yang sudah ada bounding box ke video baru ---
+                        out.write(frame_out)
+
+                        # Konversi BGR → RGB untuk ditampilkan di Streamlit
                         frame_rgb = cv2.cvtColor(frame_out, cv2.COLOR_BGR2RGB)
                         placeholder_frame.image(frame_rgb, channels="RGB", use_container_width=True)
 
@@ -387,9 +417,21 @@ elif menu_pilihan == "🎬 Deteksi Video":
                         pct = min(int(frame_ke / total_frame * 100), 100)
                         progress_bar.progress(pct, text=f"Frame {frame_ke}/{total_frame}")
 
+                    # 3. Tutup dan bersihkan memory (Sangat Penting!)
                     cap.release()
+                    out.release() 
                     progress_bar.empty()
-                    st.success(f"✅ Selesai memproses {frame_ke} frame.")
+                    st.success(f"✅ Selesai memproses {frame_ke} frame!")
+
+                    # 4. Tampilkan tombol unduh untuk video yang baru dibuat
+                    with open(output_path, "rb") as file_hasil:
+                        st.download_button(
+                            label="⬇️ Unduh Video Hasil Deteksi",
+                            data=file_hasil,
+                            file_name="ADAS_Result.mp4",
+                            mime="video/mp4",
+                            use_container_width=True
+                        )
 
     else:
         st.info("Belum ada video yang diunggah. Silakan unggah file MP4 dashcam.")
@@ -408,11 +450,27 @@ elif menu_pilihan == "📹 Realtime (Webcam)":
     with kol_ctrl:
         st.subheader("⚙️ Kontrol Kamera")
 
-        kecepatan_rt = st.slider(
-            "🚀 Kecepatan Simulasi (km/h)",
-            min_value=0, max_value=150, value=50, step=5,
+        # ── Pilihan Mode Kontrol Kecepatan ─────────────────────────────
+        mode_kontrol = st.radio(
+            "Metode Input Kecepatan:",
+            ("🎚️ Slider Standar", "🏎️ Pedal Balap"),
+            horizontal=True,
         )
 
+        st.markdown("<br>", unsafe_allow_html=True) # Sedikit jarak (spacing)
+
+        # ── Logika Saklar Kontrol ──────────────────────────────────────
+        if mode_kontrol == "🎚️ Slider Standar":
+            kecepatan_rt = st.slider(
+                "🚀 Kecepatan Simulasi (km/h)",
+                min_value=0, max_value=150, value=50, step=5,
+            )
+        else:
+            kecepatan_rt = render_speedometer()
+
+        st.markdown("---")
+
+        # ── Saklar Kamera ──────────────────────────────────────────────
         nyalakan = st.checkbox("🟢 Nyalakan Kamera", value=False)
 
         st.markdown("---")
@@ -431,9 +489,9 @@ elif menu_pilihan == "📹 Realtime (Webcam)":
             if not kamera.isOpened():
                 st.error("❌ Tidak dapat membuka kamera. Periksa koneksi atau izin browser.")
             else:
-                stop_btn = st.button("⏹ Hentikan Kamera")
+                # stop_btn = st.button("⏹ Hentikan Kamera")
 
-                while nyalakan and not stop_btn:
+                while nyalakan:
                     sukses, frame = kamera.read()
                     if not sukses:
                         st.error("Gagal membaca frame dari kamera.")
@@ -441,6 +499,10 @@ elif menu_pilihan == "📹 Realtime (Webcam)":
 
                     # Jalankan deteksi YOLO + rule engine (input BGR dari cv2)
                     frame_out, deteksi, status, pesan = jalankan_deteksi(frame, kecepatan_rt)
+
+                    # --- TAMBAHKAN TRIGGER AUDIO DI SINI ---
+                    if status in ["Peringatan", "Pelanggaran"]:
+                        putar_audio_gtts(pesan)
 
                     # Konversi BGR → RGB untuk Streamlit
                     frame_rgb = cv2.cvtColor(frame_out, cv2.COLOR_BGR2RGB)
