@@ -1,131 +1,563 @@
+"""
+=============================================================
+Smart ADAS Dashboard — UI/app.py
+Kelompok 6 | Proyek Tugas Akhir
+=============================================================
+Jalankan dengan:
+    cd UI
+    streamlit run app.py
+=============================================================
+"""
+
 import streamlit as st
 import streamlit.components.v1 as components
 import cv2
 import numpy as np
 from PIL import Image
-# from ultralytics import YOLO  # Nanti di-uncomment saat best.pt sudah dimasukkan
+import os
 
-# ==========================================
-# 1. KONFIGURASI HALAMAN UTAMA
-# ==========================================
-st.set_page_config(page_title="Smart ADAS Dashboard", page_icon="🚗", layout="wide")
+# -------------------------------------------------------------------
+# Impor dari Model/inference.py — aktif setelah best.pt tersedia
+# -------------------------------------------------------------------
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Model"))
+from inference import jalankan_deteksi, MODEL_YOLO # type: ignore
 
-# ==========================================
-# 2. SIDEBAR (NAVIGASI KIRI)
-# ==========================================
-st.sidebar.title("🚗 Smart ADAS Navigasi")
-st.sidebar.markdown("Silakan pilih mode operasi dasbor:")
 
-# Menu Utama dengan 5 Fitur yang diminta
-menu_pilihan = st.sidebar.radio(
-    "Menu Utama:",
-    ("🏠 Dashboard Screen", 
-     "🖼️ Deteksi Gambar", 
-     "🎬 Deteksi Video", 
-     "📹 Deteksi Realtime (Webcam)", 
-     "⛈️ Stress Test (Kondisi Ekstrem)")
+# ===========================================================================
+# 0. KONFIGURASI HALAMAN GLOBAL
+# ===========================================================================
+st.set_page_config(
+    page_title="Smart ADAS Dashboard",
+    page_icon="🚗",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-st.sidebar.markdown("---")
-st.sidebar.caption("Proyek Tugas Akhir - Kelompok 6")
+# Injeksi CSS kustom agar tampilan lebih tajam dan berwarna
+st.markdown("""
+<style>
+/* ---- Palet warna tema gelap ala HUD kendaraan ---- */
+:root {
+    --bg-dark:     #0d1117;
+    --panel-bg:    #161b22;
+    --accent:      #00e5ff;
+    --accent-warn: #ffd600;
+    --accent-err:  #ff1744;
+    --accent-ok:   #00e676;
+    --text-main:   #e6edf3;
+    --text-muted:  #8b949e;
+}
 
-# ==========================================
-# 3. MAIN SCREEN (TENGAH KE KANAN)
-# ==========================================
+/* ---- Latar belakang utama ---- */
+.stApp {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+}
 
-# FITUR 5: DASHBOARD SCREEN (Pendahuluan)
-if menu_pilihan == "🏠 Dashboard Screen":
-    st.title("Selamat Datang di Smart ADAS Dashboard")
-    
-    # Membaca dan menampilkan file HTML eksternal
-    try:
-        with open("dashboard_anim.html", "r", encoding="utf-8") as f:
-            html_data = f.read()
-        # Render HTML ke dalam Streamlit dengan tinggi yang pas
-        components.html(html_data, height=220)
-    except FileNotFoundError:
-        st.warning("File animasi tidak ditemukan.")
+/* ---- Sidebar ---- */
+[data-testid="stSidebar"] {
+    background-color: var(--panel-bg);
+    border-right: 1px solid #30363d;
+}
+[data-testid="stSidebar"] * {
+    color: var(--text-main) !important;
+}
 
-    st.markdown("""
-    Sistem cerdas ini dirancang untuk mendeteksi rambu lalu lintas secara otomatis menggunakan arsitektur YOLOv8.
-    
-    **Fitur yang tersedia:**
-    * **Deteksi Gambar:** Mengunggah gambar statis untuk analisis piksel.
-    * **Deteksi Video:** Memutar rekaman perjalanan (Dashcam).
-    * **Deteksi Realtime:** Menggunakan kamera langsung untuk simulasi langsung.
-    * **Stress Test:** Pengujian model AI pada kondisi ekstrem (malam hari, hujan, kamera goyang).
-    
-    *Silakan pilih menu di sebelah kiri untuk memulai.*
-    """)
+/* ---- Metrik (KPI card) ---- */
+[data-testid="stMetric"] {
+    background: var(--panel-bg);
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 16px 20px;
+}
+[data-testid="stMetricValue"] {
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+    color: var(--accent) !important;
+}
 
-# FITUR 1: DETEKSI GAMBAR
-elif menu_pilihan == "🖼️ Deteksi Gambar":
-    st.title("Deteksi Gambar Statis")
-    file_gambar = st.file_uploader("Upload gambar rambu (JPG/PNG)", type=['jpg', 'jpeg', 'png'])
-    
-    if file_gambar is not None:
-        # Menampilkan gambar asli
-        gambar_asli = Image.open(file_gambar)
-        st.image(gambar_asli, caption="Gambar yang diunggah", use_container_width=True)
-        
-        if st.button("Mulai Deteksi AI"):
-            with st.spinner("AI sedang menganalisis gambar..."):
-                # NANTI KODE YOLO MASUK DI SINI
-                # hasil = model.predict(gambar_asli)
-                
-                st.success("Deteksi Selesai! (Ini adalah tempat gambar hasil deteksi kotak merah nanti dimunculkan)")
+/* ---- Tombol ---- */
+.stButton > button {
+    background: linear-gradient(135deg, #00b4d8, #0077b6);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 1.4rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    transition: opacity 0.2s;
+}
+.stButton > button:hover { opacity: 0.85; }
 
-# FITUR 2: DETEKSI VIDEO
-elif menu_pilihan == "🎬 Deteksi Video":
-    st.title("Deteksi Video (Dashcam)")
-    file_video = st.file_uploader("Upload video perjalanan (MP4)", type=['mp4'])
-    
-    if file_video is not None:
-        st.video(file_video) # Memutar video bawaan streamlit
-        st.info("Catatan: Untuk memproses deteksi frame-by-frame, kita akan menggunakan OpenCV pada iterasi selanjutnya.")
-        
-        if st.button("Proses Video dengan AI"):
-            st.warning("Fitur pemrosesan video sedang dalam tahap integrasi dengan model.")
+/* ---- Alert / Info box kustom ---- */
+.notif-ok    { background:#003322; border-left:4px solid var(--accent-ok);   color:var(--accent-ok);   padding:12px 16px; border-radius:8px; font-weight:600; }
+.notif-warn  { background:#332b00; border-left:4px solid var(--accent-warn); color:var(--accent-warn); padding:12px 16px; border-radius:8px; font-weight:600; }
+.notif-error { background:#330011; border-left:4px solid var(--accent-err);  color:var(--accent-err);  padding:12px 16px; border-radius:8px; font-weight:600; }
 
-# FITUR 3: DETEKSI REALTIME (WEBCAM)
-elif menu_pilihan == "📹 Deteksi Realtime (Webcam)":
-    st.title("Live Dashcam (Simulasi ADAS)")
-    st.markdown("Pastikan webcam tidak sedang digunakan oleh aplikasi lain.")
-    
-    run_kamera = st.checkbox("Nyalakan Kamera")
-    tempat_video = st.empty() # Placeholder (Layar kosong yang akan diisi frame video berulang-ulang)
-    
-    if run_kamera:
-        kamera = cv2.VideoCapture(0)
-        
-        while run_kamera:
-            sukses, frame = kamera.read()
-            if not sukses:
-                st.error("Gagal membaca kamera.")
-                break
-                
-            # Konversi warna agar tidak biru di Streamlit
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            # NANTI KODE YOLO PREDICT MASUK DI SINI
-            
-            # Menembakkan gambar ke layar secara real-time
-            tempat_video.image(frame_rgb, channels="RGB", use_container_width=True)
-            
-        kamera.release()
+/* ---- Divider ---- */
+hr { border-color: #30363d; }
+
+/* ---- Judul section ---- */
+h1, h2, h3 { color: var(--accent) !important; letter-spacing: 0.02em; }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ===========================================================================
+# 1. FUNGSI UTILITAS (PLACEHOLDER — akan dihubungkan ke core_logic.py nanti)
+# ===========================================================================
+
+def muat_animasi_html(path_html: str, tinggi: int = 200) -> None:
+    """
+    Render file HTML eksternal (animasi/banner) ke dalam Streamlit.
+    Letakkan 'dashboard_anim.html' di folder UI/ yang sama dengan app.py.
+    """
+    if os.path.exists(path_html):
+        with open(path_html, "r", encoding="utf-8") as f:
+            html_konten = f.read()
+        components.html(html_konten, height=tinggi, scrolling=False)
     else:
-        st.write("Kamera dimatikan.")
+        st.caption(f"ℹ️ File animasi `{path_html}` belum ditemukan — lewati.")
 
-# FITUR 4: STRESS TEST
-elif menu_pilihan == "⛈️ Stress Test (Kondisi Ekstrem)":
-    st.title("Galeri Pengujian Kondisi Ekstrem")
-    st.markdown("Pembuktian ketangguhan model AI pada kondisi yang tidak ideal.")
-    
-    # Dropdown untuk memilih skenario
-    skenario = st.selectbox("Pilih Skenario Uji:", ("Malam Hari / Minim Cahaya", "Hujan Lebat", "Kamera Goyang (Blur)"))
-    
-    st.info(f"Anda memilih skenario: **{skenario}**. (Video demo dari tim QA/Rangga akan dimasukkan ke sini nantinya).")
-    
-    # Ruang untuk menampilkan video stress test
-    st.image("https://via.placeholder.com/800x400.png?text=Video+Stress+Test+Akan+Tampil+Di+Sini", use_container_width=True)
 
+# dummy_deteksi_frame() sudah dihapus.
+# Seluruh deteksi sekarang ditangani oleh jalankan_deteksi() dari Model/inference.py.
+
+
+def render_panel_notifikasi(status: str, pesan: str) -> None:
+    """
+    Tampilkan kotak notifikasi berwarna sesuai status dari core_logic.
+    status: 'Aman' | 'Info' | 'Peringatan' | 'Larangan' | 'Pelanggaran'
+    """
+    # Normalisasi huruf besar/kecil agar robust terhadap variasi input
+    status_lower = status.lower()
+
+    ikon_map = {
+        "aman"       : "✅",
+        "info"       : "ℹ️",
+        "peringatan" : "⚠️",
+        "larangan"   : "🚫",
+        "pelanggaran": "🚨",
+    }
+    css_map = {
+        "aman"       : "notif-ok",
+        "info"       : "notif-ok",
+        "peringatan" : "notif-warn",
+        "larangan"   : "notif-error",
+        "pelanggaran": "notif-error",
+    }
+
+    ikon     = ikon_map.get(status_lower, "ℹ️")
+    kelas_css = css_map.get(status_lower, "notif-ok")
+
+    st.markdown(
+        f"<div class='{kelas_css}'>"
+        f"{ikon} &nbsp;<strong>{status.upper()}</strong> — {pesan}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
+# ===========================================================================
+# 2. SIDEBAR — Navigasi + Animasi HTML
+# ===========================================================================
+with st.sidebar:
+    st.markdown("## 🚗 Smart ADAS")
+    st.markdown("---")
+
+    menu_pilihan = st.radio(
+        "Pilih Mode:",
+        (
+            "🏠 Dashboard",
+            "🖼️ Deteksi Gambar",
+            "🎬 Deteksi Video",
+            "📹 Realtime (Webcam)",
+            "⛈️ Stress Test",
+        ),
+        label_visibility="collapsed",
+    )
+
+    st.markdown("---")
+
+    # # ── Animasi HTML di bagian bawah sidebar ──────────────────────────────
+    # st.caption("Preview Dashboard Animation")
+    # # Path relatif dari folder UI/ tempat app.py berada
+    # muat_animasi_html("dashboard_anim.html", tinggi=180)
+
+    st.markdown("---")
+    st.caption("Kelompok 6 · Tugas Akhir · 2025")
+
+
+# ===========================================================================
+# 3. HALAMAN: DASHBOARD (Landing)
+# ===========================================================================
+if menu_pilihan == "🏠 Dashboard":
+
+    # ── Header ──────────────────────────────────────────────────────────────
+    col_judul, col_logo = st.columns([4, 1])
+    with col_judul:
+        st.title("Smart ADAS Dashboard")
+        st.markdown("Sistem deteksi rambu lalu lintas Indonesia berbasis **YOLOv8** — 48 kelas.")
+    with col_logo:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("# 🚦", unsafe_allow_html=False)   # ganti dengan st.image() jika ada logo
+        
+    # ── ANIMASI HTML PINDAH KE SINI ───────────────────────────────
+    muat_animasi_html("dashboard_anim.html", tinggi=220)
+
+    st.markdown("---")
+
+    # ── KPI Cards ───────────────────────────────────────────────────────────
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Total Kelas Rambu", "48", delta=None)
+    k2.metric("Model", "YOLOv8", delta=None)
+    k3.metric("Status Model", "Belum Dimuat", delta=None)
+    k4.metric("Mode Aktif", "Demo / Dummy", delta=None)
+
+    st.markdown("---")
+
+    # ── Ringkasan Fitur ─────────────────────────────────────────────────────
+    st.subheader("Panduan Cepat")
+    f1, f2, f3, f4 = st.columns(4)
+    with f1:
+        st.markdown("#### 🖼️ Gambar\nUnggah foto rambu untuk analisis satu frame.")
+    with f2:
+        st.markdown("#### 🎬 Video\nPutar rekaman dashcam & atur kecepatan simulator.")
+    with f3:
+        st.markdown("#### 📹 Realtime\nHubungkan webcam untuk ADAS langsung.")
+    with f4:
+        st.markdown("#### ⛈️ Stress Test\nUji model pada kondisi ekstrem (malam, hujan, blur).")
+
+
+# ===========================================================================
+# 4. HALAMAN: DETEKSI GAMBAR
+# ===========================================================================
+elif menu_pilihan == "🖼️ Deteksi Gambar":
+
+    st.title("🖼️ Deteksi Gambar Statis")
+    st.markdown("Unggah gambar rambu lalu lintas untuk dianalisis oleh model AI.")
+
+    # ── Upload ───────────────────────────────────────────────────────────────
+    file_gambar = st.file_uploader("Pilih file gambar (JPG / PNG)", type=["jpg", "jpeg", "png"])
+
+    if file_gambar:
+        gambar_pil = Image.open(file_gambar).convert("RGB")
+        gambar_np = np.array(gambar_pil)
+
+        kol_ori, kol_hasil = st.columns(2, gap="large")
+
+        with kol_ori:
+            st.subheader("Gambar Asli")
+            st.image(gambar_pil, use_container_width=True)
+
+        with kol_hasil:
+            st.subheader("Hasil Deteksi")
+            placeholder_hasil = st.empty()
+            placeholder_notif = st.empty()
+
+            if st.button("🔍 Mulai Deteksi AI", use_container_width=True):
+                with st.spinner("Model sedang memproses gambar…"):
+                    # Panggil inference nyata dari Model/inference.py
+                    frame_out, deteksi, status, pesan = jalankan_deteksi(
+                        gambar_np, kecepatan_kmh=0
+                    )
+                    # Konversi BGR → RGB untuk ditampilkan di Streamlit
+                    frame_rgb = cv2.cvtColor(frame_out, cv2.COLOR_BGR2RGB)
+                    placeholder_hasil.image(frame_rgb, channels="RGB", use_container_width=True)
+
+                with placeholder_notif.container():
+                    render_panel_notifikasi(status, pesan)
+                    if deteksi:
+                        st.json(deteksi)   # tampilkan raw JSON deteksi saat tersedia
+
+    else:
+        st.info("Belum ada gambar yang diunggah.")
+
+
+# ===========================================================================
+# 5. HALAMAN: DETEKSI VIDEO
+# ===========================================================================
+elif menu_pilihan == "🎬 Deteksi Video":
+
+    st.title("🎬 Deteksi Video — Simulasi Dashcam")
+
+    # ── Upload Video ─────────────────────────────────────────────────────────
+    file_video = st.file_uploader("Upload rekaman dashcam (MP4)", type=["mp4", "avi", "mov"])
+
+    if file_video:
+
+        st.markdown("---")
+
+        # ── Layout Utama: Player | Panel Kontrol ─────────────────────────────
+        kol_player, kol_panel = st.columns([3, 2], gap="large")
+
+        # ---- Kolom Kiri: Player Video + Placeholder Frame Deteksi ----
+        with kol_player:
+            st.subheader("Preview Video Asli")
+            st.video(file_video)
+
+            st.subheader("Output Frame Deteksi (Real-time)")
+            placeholder_frame = st.empty()   # ← tempat frame hasil YOLO di-render nanti
+            placeholder_frame.markdown(
+                "<div style='background:#161b22;border:1px dashed #30363d;"
+                "border-radius:10px;height:220px;display:flex;"
+                "align-items:center;justify-content:center;color:#8b949e;'>"
+                "Frame hasil deteksi akan muncul di sini saat model aktif."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
+        # ---- Kolom Kanan: Kontrol & Notifikasi ----
+        with kol_panel:
+            st.subheader("⚙️ Panel Kontrol ADAS")
+
+            # ── Speed Simulator Slider ─────────────────────────────────────
+            kecepatan_kmh = st.slider(
+                "🚀 Kecepatan Kendaraan (km/h)",
+                min_value=0,
+                max_value=150,
+                value=60,
+                step=5,
+                help="Manipulasi kecepatan simulasi untuk memicu rule engine ADAS.",
+            )
+
+            # Indikator visual kecepatan
+            if kecepatan_kmh <= 40:
+                warna_spd, label_spd = "#00e676", "PELAN"
+            elif kecepatan_kmh <= 80:
+                warna_spd, label_spd = "#ffd600", "SEDANG"
+            else:
+                warna_spd, label_spd = "#ff1744", "CEPAT"
+
+            st.markdown(
+                f"<div style='font-size:2.2rem;font-weight:800;color:{warna_spd};"
+                f"text-align:center;letter-spacing:0.06em;padding:8px 0'>"
+                f"{kecepatan_kmh} km/h &nbsp;<span style='font-size:1rem'>{label_spd}</span></div>",
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("---")
+
+            # ── Panel Notifikasi Status Rambu ──────────────────────────────
+            st.subheader("🔔 Status Deteksi Rambu")
+            placeholder_notif_video = st.empty()
+
+            with placeholder_notif_video.container():
+                # Nilai default sebelum model jalan
+                render_panel_notifikasi("aman", "Menunggu proses deteksi dimulai…")
+
+            st.markdown("---")
+
+            # ── Tombol Proses ──────────────────────────────────────────────
+            if st.button("▶ Proses Video dengan AI", use_container_width=True):
+                # Simpan video ke disk sementara agar cv2.VideoCapture bisa membaca
+                tmp_path = "/tmp/adas_video.mp4"
+                with open(tmp_path, "wb") as f:
+                    f.write(file_video.read())
+
+                cap = cv2.VideoCapture(tmp_path)
+                if not cap.isOpened():
+                    st.error("❌ Gagal membuka file video. Pastikan format MP4/AVI valid.")
+                else:
+                    # Hitung total frame untuk progress bar
+                    total_frame = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
+                    progress_bar = st.progress(0, text="Memproses video…")
+                    frame_ke = 0
+
+                    while cap.isOpened():
+                        ok, frame = cap.read()
+                        if not ok:
+                            break
+
+                        # Jalankan deteksi YOLO + rule engine
+                        frame_out, deteksi, status, pesan = jalankan_deteksi(
+                            frame, kecepatan_kmh
+                        )
+
+                        # Konversi BGR → RGB untuk Streamlit
+                        frame_rgb = cv2.cvtColor(frame_out, cv2.COLOR_BGR2RGB)
+                        placeholder_frame.image(frame_rgb, channels="RGB", use_container_width=True)
+
+                        with placeholder_notif_video.container():
+                            render_panel_notifikasi(status, pesan)
+
+                        # Update progress bar
+                        frame_ke += 1
+                        pct = min(int(frame_ke / total_frame * 100), 100)
+                        progress_bar.progress(pct, text=f"Frame {frame_ke}/{total_frame}")
+
+                    cap.release()
+                    progress_bar.empty()
+                    st.success(f"✅ Selesai memproses {frame_ke} frame.")
+
+    else:
+        st.info("Belum ada video yang diunggah. Silakan unggah file MP4 dashcam.")
+
+
+# ===========================================================================
+# 6. HALAMAN: REALTIME WEBCAM
+# ===========================================================================
+elif menu_pilihan == "📹 Realtime (Webcam)":
+
+    st.title("📹 Live Webcam — Simulasi ADAS Real-time")
+    st.markdown("Pastikan browser sudah memberi izin akses kamera.")
+
+    kol_cam, kol_ctrl = st.columns([3, 2], gap="large")
+
+    with kol_ctrl:
+        st.subheader("⚙️ Kontrol Kamera")
+
+        kecepatan_rt = st.slider(
+            "🚀 Kecepatan Simulasi (km/h)",
+            min_value=0, max_value=150, value=50, step=5,
+        )
+
+        nyalakan = st.checkbox("🟢 Nyalakan Kamera", value=False)
+
+        st.markdown("---")
+        st.subheader("🔔 Status Deteksi")
+        placeholder_notif_rt = st.empty()
+        with placeholder_notif_rt.container():
+            render_panel_notifikasi("aman", "Kamera belum aktif.")
+
+    with kol_cam:
+        st.subheader("Feed Kamera")
+        placeholder_cam = st.empty()
+
+        if nyalakan:
+            kamera = cv2.VideoCapture(0)
+
+            if not kamera.isOpened():
+                st.error("❌ Tidak dapat membuka kamera. Periksa koneksi atau izin browser.")
+            else:
+                stop_btn = st.button("⏹ Hentikan Kamera")
+
+                while nyalakan and not stop_btn:
+                    sukses, frame = kamera.read()
+                    if not sukses:
+                        st.error("Gagal membaca frame dari kamera.")
+                        break
+
+                    # Jalankan deteksi YOLO + rule engine (input BGR dari cv2)
+                    frame_out, deteksi, status, pesan = jalankan_deteksi(frame, kecepatan_rt)
+
+                    # Konversi BGR → RGB untuk Streamlit
+                    frame_rgb = cv2.cvtColor(frame_out, cv2.COLOR_BGR2RGB)
+
+                    # Update frame & notifikasi
+                    placeholder_cam.image(frame_rgb, channels="RGB", use_container_width=True)
+                    with placeholder_notif_rt.container():
+                        render_panel_notifikasi(status, pesan)
+
+                kamera.release()
+                placeholder_cam.markdown("_Kamera dimatikan._")
+        else:
+            placeholder_cam.markdown(
+                "<div style='background:#161b22;border:1px dashed #30363d;"
+                "border-radius:10px;height:340px;display:flex;"
+                "align-items:center;justify-content:center;color:#8b949e;'>"
+                "Feed kamera akan muncul di sini."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
+
+# ===========================================================================
+# 7. HALAMAN: STRESS TEST
+# ===========================================================================
+elif menu_pilihan == "⛈️ Stress Test":
+
+    st.title("⛈️ Stress Test — Kondisi Ekstrem")
+    st.markdown("Uji ketangguhan model AI pada skenario lingkungan yang tidak ideal.")
+
+    # ── Pilihan Skenario ─────────────────────────────────────────────────────
+    SKENARIO = {
+        "🌑 Malam Hari / Minim Cahaya": {
+            "keterangan": "Simulasi kondisi visibilitas rendah — pencahayaan < 5 lux.",
+            "filter_cv": "gelap",
+        },
+        "🌧️ Hujan Lebat": {
+            "keterangan": "Simulasi noise rain-drop dan lens-fogging pada kamera dashcam.",
+            "filter_cv": "hujan",
+        },
+        "📷 Kamera Goyang (Motion Blur)": {
+            "keterangan": "Simulasi jalan berlubang atau getaran mesin yang menyebabkan blur.",
+            "filter_cv": "blur",
+        },
+        "☀️ Silau Matahari (Overexposed)": {
+            "keterangan": "Kondisi backlight ekstrem saat berkendara ke arah matahari.",
+            "filter_cv": "silau",
+        },
+    }
+
+    skenario_dipilih = st.selectbox("Pilih Skenario Uji:", list(SKENARIO.keys()))
+    info_skenario = SKENARIO[skenario_dipilih]
+    st.info(f"**Deskripsi:** {info_skenario['keterangan']}")
+
+    st.markdown("---")
+
+    kol_up, kol_preview = st.columns(2, gap="large")
+
+    with kol_up:
+        st.subheader("Unggah Media Uji")
+        file_uji = st.file_uploader(
+            "Upload gambar atau video untuk diuji di skenario ini",
+            type=["jpg", "jpeg", "png", "mp4"],
+            key="stress_uploader",
+        )
+
+    with kol_preview:
+        st.subheader("Hasil Deteksi AI")
+        placeholder_stress = st.empty()
+
+        if file_uji:
+            if file_uji.type.startswith("image"):
+                img_uji = Image.open(file_uji).convert("RGB")
+                img_np = np.array(img_uji)
+
+                # Aplikasikan filter simulasi kondisi ekstrem
+                if info_skenario["filter_cv"] == "gelap":
+                    img_filter = (img_np * 0.25).astype(np.uint8)
+                elif info_skenario["filter_cv"] == "hujan":
+                    noise = np.random.randint(0, 60, img_np.shape, dtype=np.uint8)
+                    img_filter = cv2.add(img_np, noise)
+                elif info_skenario["filter_cv"] == "blur":
+                    img_filter = cv2.GaussianBlur(img_np, (21, 21), 0)
+                elif info_skenario["filter_cv"] == "silau":
+                    img_filter = np.clip(img_np.astype(np.int32) + 110, 0, 255).astype(np.uint8)
+                else:
+                    img_filter = img_np
+
+                # Kirim gambar yang sudah difilter ke YOLO
+                # kecepatan_kmh=0 karena ini gambar statis, bukan skenario berkendara
+                # img_filter adalah RGB (dari PIL) — inference.py menangani konversi BGR otomatis
+                frame_out, deteksi, status, pesan = jalankan_deteksi(img_filter, kecepatan_kmh=0)
+
+                # Konversi BGR → RGB hasil inference untuk ditampilkan di Streamlit
+                frame_rgb = cv2.cvtColor(frame_out, cv2.COLOR_BGR2RGB)
+
+                # Tampilkan frame hasil deteksi AI (bukan lagi img_filter mentah)
+                placeholder_stress.image(frame_rgb, caption=f"Hasil AI: {skenario_dipilih}", use_container_width=True)
+
+                # Tampilkan panel status notifikasi di bawah gambar
+                render_panel_notifikasi(status, pesan)
+
+            elif file_uji.type == "video/mp4":
+                placeholder_stress.video(file_uji)
+                st.caption("Proses filter video tersedia setelah integrasi OpenCV penuh.")
+        else:
+            placeholder_stress.markdown(
+                "<div style='background:#161b22;border:1px dashed #30363d;"
+                "border-radius:10px;height:260px;display:flex;"
+                "align-items:center;justify-content:center;color:#8b949e;'>"
+                "Preview skenario akan tampil di sini."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("---")
+    st.markdown(
+        "📌 **Catatan Tim QA:** Hasil pengujian video dari tiap skenario akan "
+        "didokumentasikan di folder `docs/stress_test/` setelah sesi recording selesai."
+    )

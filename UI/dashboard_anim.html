@@ -1,102 +1,452 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-    <style>
-        body { 
-            margin: 0; 
-            padding: 0; 
-            overflow: hidden; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-        }
-        .container { 
-            position: relative; 
-            width: 100%; 
-            height: 220px; 
-            background: linear-gradient(to bottom, #87CEFA 0%, #E0F6FF 100%); /* Langit Biru Cerah */
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        
-        /* Jalan Aspal */
-        .asphalt {
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-            height: 80px;
-            background-color: #34495e; /* Warna aspal gelap */
-            border-top: 4px solid #7f8c8d; /* Trotoar/Pembatas jalan */
-            overflow: hidden;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:#0a0e14;
+    font-family:'Courier New',monospace;
+    overflow:hidden;
+    height:180px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
 
-        /* Marka Garis Putus-Putus */
-        .road-lines {
-            position: absolute;
-            bottom: 35px; /* Berada di tengah aspal */
-            width: 200%;
-            height: 6px;
-            background: repeating-linear-gradient(
-                90deg, 
-                transparent, 
-                transparent 40px, 
-                #ffffff 40px, /* Garis putih */
-                #ffffff 80px
-            );
-            animation: driveRoad 0.6s linear infinite;
-        }
+  /* ── Canvas latar: grid perspektif ── */
+  #grid-canvas{
+    position:absolute;
+    top:0;left:0;
+    width:100%;height:100%;
+    opacity:0.18;
+  }
 
-        /* Pemandangan: Pohon dan Rambu */
-        .scenery {
-            position: absolute;
-            bottom: 80px; /* Tepat di atas aspal */
-            font-size: 45px;
-            right: -100px;
-            animation: passBy 4s linear infinite;
-        }
-        .scenery.tree1 { animation-delay: 0s; }
-        .scenery.sign { animation-delay: 1.5s; }
-        .scenery.tree2 { animation-delay: 2.5s; font-size: 35px; filter: brightness(0.8); } /* Pohon lebih kecil di background */
+  /* ── Wrapper utama ── */
+  .hud{
+    position:relative;
+    width:100%;
+    max-width:820px;
+    height:160px;
+    display:flex;
+    align-items:center;
+    padding:0 24px;
+    gap:0;
+  }
 
-        /* Mobil */
-        .car-emoji {
-            position: absolute;
-            bottom: 25px; /* Berada di atas aspal */
-            left: 15%;
-            font-size: 65px;
-            /* Membalik mobil agar menghadap kanan, plus animasi suspensi */
-            animation: carSuspension 0.3s infinite alternate ease-in-out;
-            filter: drop-shadow(5px 5px 4px rgba(0,0,0,0.4));
-            z-index: 10;
-        }
+  /* ── Speedometer arc kiri ── */
+  .speedo-wrap{
+    position:relative;
+    width:150px;
+    height:150px;
+    flex-shrink:0;
+  }
+  #speedo-svg{width:150px;height:150px}
 
-        /* Keyframes untuk Animasi */
-        @keyframes driveRoad {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-80px); } /* Menggerakkan jalan ke kiri */
-        }
-        @keyframes carSuspension {
-            0% { transform: scaleX(-1) translateY(0); }
-            100% { transform: scaleX(-1) translateY(-4px); }
-        }
-        @keyframes passBy {
-            0% { right: -100px; }
-            100% { right: 100%; }
-        }
-    </style>
+  .speedo-num{
+    position:absolute;
+    top:50%;left:50%;
+    transform:translate(-50%,-42%);
+    text-align:center;
+    line-height:1;
+  }
+  .speedo-num .val{
+    font-size:32px;
+    font-weight:700;
+    color:#00e5ff;
+    font-family:'Courier New',monospace;
+    letter-spacing:-1px;
+    text-shadow:0 0 12px rgba(0,229,255,0.5);
+  }
+  .speedo-num .unit{
+    font-size:9px;
+    color:#5a8fa0;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    display:block;
+    margin-top:2px;
+  }
+
+  /* ── Divider vertikal ── */
+  .vdivider{
+    width:1px;
+    height:110px;
+    background:linear-gradient(to bottom,transparent,#1e3a45,transparent);
+    margin:0 20px;
+    flex-shrink:0;
+  }
+
+  /* ── Pusat: info panel ── */
+  .center-panel{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+
+  /* judul */
+  .hud-title{
+    font-size:11px;
+    letter-spacing:4px;
+    color:#00e5ff;
+    text-transform:uppercase;
+    opacity:0.85;
+  }
+  .hud-title span{
+    color:#ffffff;
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:3px;
+  }
+
+  /* baris kelas deteksi */
+  .detect-row{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+  .cls-badge{
+    font-size:8px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    padding:3px 8px;
+    border-radius:2px;
+    border:1px solid;
+    animation:fadein 0.4s ease both;
+  }
+  .cls-badge.ok  {color:#00e676;border-color:#00e676;background:rgba(0,230,118,0.06)}
+  .cls-badge.warn{color:#ffd600;border-color:#ffd600;background:rgba(255,214,0,0.06)}
+  .cls-badge.err {color:#ff1744;border-color:#ff1744;background:rgba(255,23,68,0.07)}
+
+  /* scan bar */
+  .scan-wrap{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  .scan-label{
+    font-size:8px;
+    letter-spacing:2px;
+    color:#2e5c6e;
+    text-transform:uppercase;
+  }
+  .scan-bar{
+    height:3px;
+    background:#0d2530;
+    border-radius:2px;
+    overflow:hidden;
+    position:relative;
+  }
+  .scan-fill{
+    height:100%;
+    border-radius:2px;
+    background:linear-gradient(90deg,#0077b6,#00e5ff);
+    box-shadow:0 0 6px rgba(0,229,255,0.4);
+    transition:width 0.6s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  /* ── Divider 2 ── */
+
+  /* ── Kanan: live feed indicator + 48 kelas counter ── */
+  .right-panel{
+    width:130px;
+    flex-shrink:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+  }
+
+  /* live dot */
+  .live-pill{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    background:rgba(255,23,68,0.08);
+    border:1px solid rgba(255,23,68,0.3);
+    border-radius:2px;
+    padding:4px 10px;
+    width:100%;
+    justify-content:center;
+  }
+  .live-dot{
+    width:6px;height:6px;
+    border-radius:50%;
+    background:#ff1744;
+    box-shadow:0 0 6px #ff1744;
+    animation:blink 1.2s ease-in-out infinite;
+  }
+  .live-text{
+    font-size:9px;
+    letter-spacing:2px;
+    color:#ff4d6d;
+    text-transform:uppercase;
+  }
+
+  /* kelas counter */
+  .class-counter{
+    text-align:center;
+  }
+  .class-counter .big{
+    font-size:36px;
+    font-weight:700;
+    color:#00e5ff;
+    line-height:1;
+    text-shadow:0 0 16px rgba(0,229,255,0.35);
+  }
+  .class-counter .lbl{
+    font-size:8px;
+    letter-spacing:2px;
+    color:#2e5c6e;
+    text-transform:uppercase;
+    margin-top:2px;
+  }
+
+  /* radar ring */
+  #radar-svg{
+    position:absolute;
+    right:16px;bottom:6px;
+    opacity:0.12;
+    pointer-events:none;
+  }
+
+  /* ── Animasi ── */
+  @keyframes blink{
+    0%,100%{opacity:1}
+    50%{opacity:0.2}
+  }
+  @keyframes fadein{
+    from{opacity:0;transform:translateY(4px)}
+    to{opacity:1;transform:translateY(0)}
+  }
+  @keyframes spin{
+    to{transform:rotate(360deg)}
+  }
+  @keyframes sweepline{
+    0%{transform:rotate(0deg)}
+    100%{transform:rotate(360deg)}
+  }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h3 style="position: absolute; top: 10px; left: 20px; margin: 0; color: #2c3e50;">
-            Status AI: <span style="color: #27ae60;">Aktif & Memantau</span>
-        </h3>
-        
-        <div class="scenery tree1">🌲</div>
-        <div class="scenery sign">🚸</div>
-        <div class="scenery tree2">🌳</div>
-        
-        <div class="asphalt">
-            <div class="road-lines"></div>
-        </div>
-        <div class="car-emoji">🚙</div>
+
+<!-- Grid perspektif -->
+<canvas id="grid-canvas"></canvas>
+
+<!-- Radar bg decoration -->
+<svg id="radar-svg" width="120" height="120" viewBox="0 0 120 120">
+  <circle cx="60" cy="60" r="50" fill="none" stroke="#00e5ff" stroke-width="0.5"/>
+  <circle cx="60" cy="60" r="35" fill="none" stroke="#00e5ff" stroke-width="0.5"/>
+  <circle cx="60" cy="60" r="18" fill="none" stroke="#00e5ff" stroke-width="0.5"/>
+  <line x1="10" y1="60" x2="110" y2="60" stroke="#00e5ff" stroke-width="0.4"/>
+  <line x1="60" y1="10" x2="60" y2="110" stroke="#00e5ff" stroke-width="0.4"/>
+  <g id="sweep-group" style="transform-origin:60px 60px;animation:sweepline 3s linear infinite">
+    <line x1="60" y1="60" x2="110" y2="60" stroke="#00e5ff" stroke-width="1" stroke-opacity="0.8"/>
+  </g>
+</svg>
+
+<div class="hud">
+
+  <!-- KIRI: Speedometer -->
+  <div class="speedo-wrap">
+    <svg id="speedo-svg" viewBox="0 0 150 150">
+      <!-- Track arc -->
+      <path id="arc-track"
+        d="M 20,115 A 60,60 0 1 1 130,115"
+        fill="none" stroke="#0d2530" stroke-width="8" stroke-linecap="round"/>
+      <!-- Fill arc (animated) -->
+      <path id="arc-fill"
+        d="M 20,115 A 60,60 0 1 1 130,115"
+        fill="none" stroke="url(#spd-grad)" stroke-width="8"
+        stroke-linecap="round"
+        stroke-dasharray="288"
+        stroke-dashoffset="288"
+        style="transition:stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1)"/>
+      <!-- Tick marks -->
+      <g id="ticks"></g>
+      <!-- Needle -->
+      <line id="needle"
+        x1="75" y1="75"
+        x2="75" y2="28"
+        stroke="#00e5ff" stroke-width="2" stroke-linecap="round"
+        style="transform-origin:75px 75px;transform:rotate(-120deg);transition:transform 0.8s cubic-bezier(0.4,0,0.2,1)"/>
+      <circle cx="75" cy="75" r="5" fill="#0a0e14" stroke="#00e5ff" stroke-width="1.5"/>
+      <defs>
+        <linearGradient id="spd-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#0077b6"/>
+          <stop offset="60%" stop-color="#00e5ff"/>
+          <stop offset="100%" stop-color="#ff1744"/>
+        </linearGradient>
+      </defs>
+    </svg>
+    <div class="speedo-num">
+      <div class="val" id="spd-val">72</div>
+      <span class="unit">km/h</span>
     </div>
+  </div>
+
+  <div class="vdivider"></div>
+
+  <!-- TENGAH: Info panel -->
+  <div class="center-panel">
+
+    <div class="hud-title">Smart <span>ADAS</span> · YOLOv8</div>
+
+    <!-- Badge kelas yang terdeteksi (dirotasi JS) -->
+    <div class="detect-row" id="badge-row">
+      <span class="cls-badge ok">Rambu Berhenti</span>
+      <span class="cls-badge warn">Batas 60</span>
+      <span class="cls-badge ok">Jalan Lurus</span>
+    </div>
+
+    <!-- Bar-bar confidence score -->
+    <div class="scan-wrap">
+      <div class="scan-label">Confidence</div>
+      <div class="scan-bar"><div class="scan-fill" id="bar1" style="width:88%"></div></div>
+      <div class="scan-bar"><div class="scan-fill" id="bar2" style="width:72%;background:linear-gradient(90deg,#1d6a00,#00e676)"></div></div>
+      <div class="scan-bar"><div class="scan-fill" id="bar3" style="width:61%;background:linear-gradient(90deg,#7a4900,#ffd600)"></div></div>
+    </div>
+
+  </div>
+
+  <div class="vdivider"></div>
+
+  <!-- KANAN: Live + counter -->
+  <div class="right-panel">
+    <div class="live-pill">
+      <div class="live-dot"></div>
+      <span class="live-text">Live</span>
+    </div>
+    <div class="class-counter">
+      <div class="big" id="class-count">0</div>
+      <div class="lbl">kelas rambu</div>
+    </div>
+  </div>
+
+</div><!-- /hud -->
+
+<script>
+(function(){
+
+  /* ── 1. Grid perspektif ── */
+  const cvs = document.getElementById('grid-canvas');
+  const W = cvs.width  = window.innerWidth;
+  const H = cvs.height = 180;
+  const ctx = cvs.getContext('2d');
+  ctx.strokeStyle = '#00e5ff';
+  ctx.lineWidth   = 0.4;
+  const vx = W/2, vy = H*1.6;
+  const rows = 12, cols = 18;
+  for(let i=0;i<=cols;i++){
+    const x = (W/(cols))*i;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(vx+(x-vx)*0.05,H); ctx.stroke();
+  }
+  for(let j=0;j<=rows;j++){
+    const t = j/rows;
+    const y = H*t;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+
+  /* ── 2. Speedometer ticks ── */
+  const tickG = document.getElementById('ticks');
+  for(let i=0;i<=10;i++){
+    const ang = (-120 + 240*(i/10)) * Math.PI/180;
+    const r1=58, r2=i%5===0?48:53;
+    const x1=75+r1*Math.sin(ang), y1=75-r1*Math.cos(ang);
+    const x2=75+r2*Math.sin(ang), y2=75-r2*Math.cos(ang);
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+    line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+    line.setAttribute('stroke', i%5===0 ? '#2e5c6e' : '#1a3545');
+    line.setAttribute('stroke-width', i%5===0 ? '1.5' : '1');
+    tickG.appendChild(line);
+  }
+
+  /* ── 3. Animasi kecepatan ── */
+  const SPEEDS = [0,30,45,72,95,60,80,110,55,72];
+  let si = 0;
+  function setSpeed(kmh){
+    const pct = Math.min(kmh/150, 1);
+    const arcLen = 288;
+    document.getElementById('arc-fill').style.strokeDashoffset = arcLen*(1-pct);
+    const ang = -120 + 240*pct;
+    document.getElementById('needle').style.transform = `rotate(${ang}deg)`;
+    // animate number
+    const cur = parseInt(document.getElementById('spd-val').textContent)||0;
+    const diff = kmh - cur;
+    const steps = 20;
+    let step = 0;
+    const t = setInterval(()=>{
+      step++;
+      document.getElementById('spd-val').textContent =
+        Math.round(cur + diff*(step/steps));
+      if(step>=steps) clearInterval(t);
+    }, 30);
+  }
+  function nextSpeed(){
+    si = (si+1)%SPEEDS.length;
+    setSpeed(SPEEDS[si]);
+  }
+  setSpeed(72);
+  setInterval(nextSpeed, 2200);
+
+  /* ── 4. Rotasi badge kelas ── */
+  const BADGES = [
+    {label:'Rambu Berhenti', cls:'err'},
+    {label:'Batas 60 km/h', cls:'warn'},
+    {label:'Jalan Lurus',   cls:'ok'},
+    {label:'Dilarang Masuk',cls:'err'},
+    {label:'Prioritas',     cls:'ok'},
+    {label:'Tikungan Kiri', cls:'warn'},
+    {label:'Tempat Ibadah',   cls:'ok'},
+    {label:'Parkir Dilarang',cls:'warn'},
+    {label:'Batas 80 km/h', cls:'err'},
+    {label:'Jembatan Sempit',cls:'warn'},
+    {label:'Lampu Merah',   cls:'err'},
+    {label:'Turunan Curam', cls:'warn'},
+  ];
+  function pickThree(){
+    const pool = [...BADGES];
+    const res = [];
+    while(res.length<3){
+      const idx = Math.floor(Math.random()*pool.length);
+      res.push(pool.splice(idx,1)[0]);
+    }
+    return res;
+  }
+  function renderBadges(){
+    const row = document.getElementById('badge-row');
+    row.innerHTML='';
+    pickThree().forEach((b,i)=>{
+      const s = document.createElement('span');
+      s.className = `cls-badge ${b.cls}`;
+      s.textContent = b.label;
+      s.style.animationDelay = `${i*0.08}s`;
+      row.appendChild(s);
+    });
+  }
+  renderBadges();
+  setInterval(renderBadges, 2800);
+
+  /* ── 5. Animasi confidence bars ── */
+  function animBars(){
+    document.getElementById('bar1').style.width = (50+Math.random()*45).toFixed(0)+'%';
+    document.getElementById('bar2').style.width = (45+Math.random()*50).toFixed(0)+'%';
+    document.getElementById('bar3').style.width = (35+Math.random()*55).toFixed(0)+'%';
+  }
+  setInterval(animBars, 1800);
+
+  /* ── 6. Counter kelas (count-up ke 48) ── */
+  let cc = 0;
+  const cEl = document.getElementById('class-count');
+  const cTimer = setInterval(()=>{
+    cc++;
+    cEl.textContent = cc;
+    if(cc>=48) clearInterval(cTimer);
+  }, 42);
+
+})();
+</script>
 </body>
 </html>
