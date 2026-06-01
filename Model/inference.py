@@ -69,7 +69,7 @@ _ROOT_DIR  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOGIC_DIR = os.path.join(_ROOT_DIR, "Logic")
 sys.path.insert(0, _LOGIC_DIR)
 
-from core_logic import evaluasi_batch, ambil_prioritas_tertinggi
+from core_logic import evaluasi_batch, ambil_prioritas_tertinggi # type: ignore
 
 
 # ==============================================================

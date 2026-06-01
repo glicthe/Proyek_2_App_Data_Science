@@ -1,7 +1,7 @@
 """
 =============================================================
 Smart ADAS Dashboard — UI/app.py
-Kelompok 6 | Proyek Tugas Akhir
+Kelompok 4 | Proyek Tugas Akhir
 =============================================================
 Jalankan dengan:
     cd UI
@@ -190,7 +190,7 @@ with st.sidebar:
     # muat_animasi_html("dashboard_anim.html", tinggi=180)
 
     st.markdown("---")
-    st.caption("Kelompok 6 · Tugas Akhir · 2025")
+    st.caption("Kelompok 4 · Tugas Akhir · 2025")
 
 
 # ===========================================================================
